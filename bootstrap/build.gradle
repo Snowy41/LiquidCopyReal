@@ -1,0 +1,66 @@
+plugins {
+    id 'java-library'
+}
+
+base {
+    archivesName = 'liquidcopy-bootstrap'
+}
+
+dependencies {
+    implementation project(':core')
+    implementation project(':client')
+    implementation "org.ow2.asm:asm:${asm_version}"
+    implementation "org.ow2.asm:asm-tree:${asm_version}"
+    implementation "org.ow2.asm:asm-commons:${asm_version}"
+    implementation "com.google.code.gson:gson:${gson_version}"
+
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.ow2.asm:asm-analysis:${asm_version}"
+    testImplementation "org.ow2.asm:asm-util:${asm_version}"
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Test).configureEach {
+    dependsOn project(':client').tasks.named('provisionMinecraft')
+    useJUnitPlatform()
+    systemProperty(
+        'liquidcopy.officialClientJar',
+        rootProject.layout.projectDirectory.file('.minecraft-cache/1.21.11-unobfuscated/client.jar').asFile.absolutePath
+    )
+}
+
+tasks.register('fatJar', Jar) {
+    dependsOn configurations.runtimeClasspath
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes(
+            'Main-Class': 'dev.liquidcopy.bootstrap.BootstrapMain',
+            'Premain-Class': 'dev.liquidcopy.bootstrap.BootstrapMain',
+            'Agent-Class': 'dev.liquidcopy.bootstrap.BootstrapMain',
+            'Can-Redefine-Classes': 'false',
+            'Can-Retransform-Classes': 'false',
+            'Implementation-Title': 'LiquidCopy Bootstrap',
+            'Implementation-Version': project.version
+        )
+    }
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+tasks.named('assemble') {
+    dependsOn 'fatJar'
+}

@@ -1,0 +1,9 @@
+.gradle/
+.idea/
+**/build/
+run/
+out/
+*.iml
+*.log
+.transaction/
+.minecraft-cache/

@@ -1,0 +1,66 @@
+plugins {
+    id 'application'
+}
+
+base {
+    archivesName = 'liquidcopy-launcher'
+}
+
+dependencies {
+    implementation "com.google.code.gson:gson:${gson_version}"
+
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+application {
+    mainClass = 'dev.liquidcopy.launcher.LauncherMain'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+}
+
+def bootstrapFatJar = project(':bootstrap').tasks.named('fatJar', Jar)
+
+tasks.named('processResources', ProcessResources) {
+    dependsOn bootstrapFatJar
+    filesMatching('liquidcopy-launcher.properties') {
+        expand(projectVersion: project.version)
+    }
+    from(bootstrapFatJar.flatMap { it.archiveFile }) {
+        into 'payload'
+        rename { 'liquidcopy-bootstrap.jar' }
+    }
+}
+
+tasks.register('fatJar', Jar) {
+    dependsOn configurations.runtimeClasspath, tasks.named('classes')
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest {
+        attributes(
+            'Main-Class': application.mainClass.get(),
+            'Implementation-Title': 'LiquidCopy Launcher',
+            'Implementation-Version': project.version
+        )
+    }
+    from sourceSets.main.output
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
+tasks.named('assemble') {
+    dependsOn tasks.named('fatJar')
+}

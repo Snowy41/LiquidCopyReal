@@ -1,0 +1,86 @@
+plugins {
+    id 'base'
+}
+
+allprojects {
+    group = providers.gradleProperty('maven_group').get()
+    version = providers.gradleProperty('project_version').get()
+}
+
+subprojects {
+    repositories {
+        mavenCentral()
+        maven { url = 'https://repo.spongepowered.org/repository/maven-public/' }
+    }
+}
+
+allprojects {
+    tasks.withType(AbstractArchiveTask).configureEach {
+        preserveFileTimestamps = false
+        reproducibleFileOrder = true
+    }
+}
+
+tasks.register('verifyStandalone') {
+    dependsOn ':core:test', ':client:test', ':bootstrap:test', ':launcher:test',
+        ':bootstrap:fatJar', ':launcher:fatJar'
+    group = 'verification'
+    description = 'Verifies the 1.21.11-only, loader-free release contract.'
+    doLast {
+        def fabricMetadata = fileTree(rootDir) {
+            include '**/fabric.mod.json', '**/*.mixins.json'
+            exclude '**/build/**', '**/.gradle/**', '**/.minecraft-cache/**'
+        }.files
+        if (!fabricMetadata.empty) {
+            throw new GradleException("Loader metadata is not allowed: ${fabricMetadata}")
+        }
+
+        def dependencyScripts = fileTree(rootDir) {
+            include '**/*.gradle', '**/*.gradle.kts'
+            exclude '**/build/**', '**/.gradle/**'
+        }
+        // Split the tokens so this verifier does not match its own source text.
+        def forbiddenTokens = ['net.' + 'fabricmc', 'fabric-' + 'loader', 'fabric-' + 'api']
+        def forbidden = dependencyScripts.files.findAll { file ->
+            def text = file.getText('UTF-8')
+            forbiddenTokens.any(text::contains)
+        }
+        if (!forbidden.empty) {
+            throw new GradleException("Fabric dependency found: ${forbidden}")
+        }
+
+        def bootstrapJar = project(':bootstrap').tasks.named('fatJar').get().archiveFile.get().asFile
+        def minecraftClasses = zipTree(bootstrapJar).matching { include 'net/minecraft/**' }.files
+        if (!minecraftClasses.empty) {
+            throw new GradleException('Bootstrap must not redistribute Minecraft classes')
+        }
+        logger.lifecycle('Standalone contract: PASS (Minecraft 1.21.11, no loader metadata/dependencies, no game classes)')
+    }
+}
+
+tasks.register('stageRelease', Sync) {
+    dependsOn ':bootstrap:fatJar', ':launcher:fatJar'
+    into layout.buildDirectory.dir('release/LiquidCopy-1.21.11')
+
+    from("bootstrap/build/libs/liquidcopy-bootstrap-${project.version}-all.jar") {
+        rename { 'LiquidCopy-Bootstrap-1.21.11.jar' }
+    }
+    from("launcher/build/libs/liquidcopy-launcher-${project.version}-all.jar") {
+        rename { 'LiquidCopy-Launcher.jar' }
+    }
+    from('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')
+    from('.') {
+        include 'docs/**'
+    }
+    from('scripts/Launch LiquidCopy.cmd', 'scripts/launch-liquidcopy.sh')
+    from('scripts/install.ps1', 'scripts/install.sh')
+}
+
+tasks.register('releaseZip', Zip) {
+    dependsOn 'stageRelease', 'verifyStandalone'
+    archiveFileName = "LiquidCopy-1.21.11-${project.version}.zip"
+    destinationDirectory = layout.buildDirectory.dir('distributions')
+    from(layout.buildDirectory.dir('release/LiquidCopy-1.21.11')) {
+        into 'LiquidCopy-1.21.11'
+    }
+}

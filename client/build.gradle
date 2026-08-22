@@ -1,0 +1,75 @@
+plugins {
+    id 'java-library'
+}
+
+base {
+    archivesName = 'liquidcopy-client-mapped'
+}
+
+def minecraftJar = rootProject.layout.projectDirectory.file('.minecraft-cache/1.21.11-unobfuscated/client.jar')
+def minecraftUrl = 'https://piston-data.mojang.com/v1/objects/4509ee9b65f226be61142d37bf05f8d28b03417b/client.jar'
+def minecraftSha1 = '4509ee9b65f226be61142d37bf05f8d28b03417b'
+
+tasks.register('provisionMinecraft') {
+    outputs.file minecraftJar
+    doLast {
+        File output = minecraftJar.asFile
+        output.parentFile.mkdirs()
+        if (!output.exists()) {
+            new URI(minecraftUrl).toURL().withInputStream { input ->
+                output.withOutputStream { stream -> stream << input }
+            }
+        }
+        def digest = java.security.MessageDigest.getInstance('SHA-1')
+        output.withInputStream { input ->
+            byte[] buffer = new byte[8192]
+            for (int read = input.read(buffer); read >= 0; read = input.read(buffer)) {
+                if (read > 0) digest.update(buffer, 0, read)
+            }
+        }
+        def actual = digest.digest().encodeHex().toString()
+        if (actual != minecraftSha1) {
+            throw new GradleException("Minecraft 1.21.11 unobfuscated JAR SHA-1 mismatch: ${actual}")
+        }
+    }
+}
+
+dependencies {
+    api project(':core')
+    compileOnly files(minecraftJar)
+    compileOnly 'org.joml:joml:1.10.8'
+    compileOnly 'org.lwjgl:lwjgl:3.3.3'
+    compileOnly 'org.lwjgl:lwjgl-glfw:3.3.3'
+    compileOnly 'org.lwjgl:lwjgl-opengl:3.3.3'
+    compileOnly 'com.google.guava:guava:33.5.0-jre'
+    compileOnly 'com.mojang:brigadier:1.3.10'
+    compileOnly 'org.slf4j:slf4j-api:2.0.17'
+    compileOnly 'org.jspecify:jspecify:1.0.0'
+    testImplementation platform("org.junit:junit-bom:${junit_version}")
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation "org.ow2.asm:asm:${asm_version}"
+    testImplementation "org.ow2.asm:asm-tree:${asm_version}"
+    testRuntimeOnly files(minecraftJar)
+    testRuntimeOnly 'com.mojang:brigadier:1.3.10'
+    testRuntimeOnly 'org.joml:joml:1.10.8'
+    testRuntimeOnly 'org.lwjgl:lwjgl:3.3.3'
+    testRuntimeOnly 'org.lwjgl:lwjgl-glfw:3.3.3'
+    testRuntimeOnly 'org.slf4j:slf4j-api:2.0.17'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    dependsOn tasks.named('provisionMinecraft')
+    options.release = 21
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    systemProperty('liquidcopy.officialClientJar', minecraftJar.asFile.absolutePath)
+}
