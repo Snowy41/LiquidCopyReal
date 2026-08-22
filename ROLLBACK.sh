@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
 set -eu
 
-BASELINE_COMMIT="18ac88f0101c22e3b27555eaddb102391fe82961"
-BASELINE_TREE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+BASELINE_COMMIT="10ab071612562ed5fba91cf3a4f05417240135a8"
+BASELINE_TREE="98e50c9e30211070b1759431630540d1df532356"
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 GIT_ROOT=$(CDPATH= cd -- "$(git -C "$ROOT" rev-parse --show-toplevel)" && pwd -P)

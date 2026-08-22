@@ -1,7 +1,5 @@
 package dev.liquidcopy.launcher;
 
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -11,9 +9,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -28,11 +23,11 @@ class InstallServiceTest {
     Path minecraftDirectory;
 
     @Test
-    void installsAtomicallyPreservesProfilesAndVerifiesPayload() throws Exception {
+    void installsStandaloneMetadataAndVerifiesPayload() throws Exception {
         byte[] zip = profileZip();
         byte[] payload = "embedded-agent-payload".getBytes(StandardCharsets.UTF_8);
-        String originalProfiles = "{\"clientToken\":\"keep\",\"profiles\":{\"existing\":{\"lastVersionId\":\"1.21.11\"}}}";
-        Files.writeString(minecraftDirectory.resolve("launcher_profiles.json"), originalProfiles);
+        String unrelatedLauncherProfiles = "{\"profiles\":{\"keep\":{\"name\":\"untouched\"}}}";
+        Files.writeString(minecraftDirectory.resolve("launcher_profiles.json"), unrelatedLauncherProfiles);
         InstallService service = service(zip, payload, Hashing.sha1(zip));
 
         InstallService.InstallReport report = service.install(minecraftDirectory);
@@ -40,45 +35,13 @@ class InstallServiceTest {
         assertTrue(Files.isRegularFile(report.baseProfile()));
         assertTrue(Files.isRegularFile(report.customProfile()));
         assertArrayEquals(payload, Files.readAllBytes(report.bootstrap()));
-        assertEquals(originalProfiles, Files.readString(minecraftDirectory.resolve(InstallService.PROFILE_BACKUP_NAME)));
-
-        JsonObject profiles = JsonParser.parseString(Files.readString(report.launcherProfiles())).getAsJsonObject();
-        assertEquals("keep", profiles.get("clientToken").getAsString());
-        assertTrue(profiles.getAsJsonObject("profiles").has("existing"));
-        assertEquals(ProfileComposer.CUSTOM_VERSION_ID,
-            profiles.getAsJsonObject("profiles").getAsJsonObject(InstallService.PROFILE_KEY)
-                .get("lastVersionId").getAsString());
-        assertEquals(InstallService.instanceDirectory(minecraftDirectory).toString(),
-            profiles.getAsJsonObject("profiles").getAsJsonObject(InstallService.PROFILE_KEY)
-                .get("gameDir").getAsString());
-        assertTrue(Files.isDirectory(InstallService.instanceDirectory(minecraftDirectory)));
+        assertEquals(InstallService.instanceDirectory(minecraftDirectory), report.instanceDirectory());
+        assertTrue(Files.isDirectory(report.instanceDirectory()));
+        assertEquals(unrelatedLauncherProfiles,
+            Files.readString(minecraftDirectory.resolve("launcher_profiles.json")));
 
         InstallService.VerificationReport verification = service.verify(minecraftDirectory);
         assertTrue(verification.valid(), () -> String.join("; ", verification.messages()));
-    }
-
-    @Test
-    void repairPreservesProfileCreationAndUnknownFields() throws Exception {
-        byte[] zip = profileZip();
-        byte[] payload = "agent".getBytes(StandardCharsets.UTF_8);
-        String existing = """
-            {"profiles":{"LiquidCopy-1.21.11":{
-              "created":"2020-01-02T03:04:05Z",
-              "lastVersionId":"broken",
-              "customExtension":{"keep":true}
-            }}}
-            """;
-        Files.writeString(minecraftDirectory.resolve("launcher_profiles.json"), existing);
-        InstallService service = service(zip, payload, Hashing.sha1(zip));
-
-        service.install(minecraftDirectory);
-
-        JsonObject entry = JsonParser.parseString(Files.readString(minecraftDirectory.resolve("launcher_profiles.json")))
-            .getAsJsonObject().getAsJsonObject("profiles").getAsJsonObject(InstallService.PROFILE_KEY);
-        assertEquals("2020-01-02T03:04:05Z", entry.get("created").getAsString());
-        assertTrue(entry.getAsJsonObject("customExtension").get("keep").getAsBoolean());
-        assertEquals(ProfileComposer.CUSTOM_VERSION_ID, entry.get("lastVersionId").getAsString());
-        assertEquals(InstallService.instanceDirectory(minecraftDirectory).toString(), entry.get("gameDir").getAsString());
     }
 
     @Test
@@ -109,7 +72,6 @@ class InstallServiceTest {
         return new InstallService(
             uri -> zip,
             () -> payload,
-            Clock.fixed(Instant.parse("2026-08-22T12:00:00Z"), ZoneOffset.UTC),
             "0.1.0",
             URI.create("https://example.invalid/profile.zip"),
             expectedHash

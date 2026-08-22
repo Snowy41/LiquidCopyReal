@@ -23,7 +23,7 @@ allprojects {
 
 tasks.register('verifyStandalone') {
     dependsOn ':core:test', ':client:test', ':bootstrap:test', ':launcher:test',
-        ':bootstrap:fatJar', ':launcher:fatJar'
+        ':bootstrap:fatJar', ':launcher:fatJar', ':launcher:bundleWindowsRuntime'
     group = 'verification'
     description = 'Verifies the 1.21.11-only, loader-free release contract.'
     doLast {
@@ -54,12 +54,79 @@ tasks.register('verifyStandalone') {
         if (!minecraftClasses.empty) {
             throw new GradleException('Bootstrap must not redistribute Minecraft classes')
         }
-        logger.lifecycle('Standalone contract: PASS (Minecraft 1.21.11, no loader metadata/dependencies, no game classes)')
+
+        def launcherSources = fileTree('launcher/src/main/java') { include '**/*.java' }
+        def officialLauncherHooks = [
+            'launcher_' + 'profiles.json',
+            'minecraft' + '://',
+            'Microsoft.4297127D64EC6',
+            'openMinecraft' + 'Launcher'
+        ]
+        def coupledLauncherFiles = launcherSources.files.findAll { file ->
+            def text = file.getText('UTF-8')
+            officialLauncherHooks.any(text::contains)
+        }
+        if (!coupledLauncherFiles.empty) {
+            throw new GradleException("Standalone launcher must not control the official Minecraft Launcher: ${coupledLauncherFiles}")
+        }
+
+        def requiredLauncherClasses = [
+            'MicrosoftAuthService.java',
+            'DirectLaunchService.java',
+            'AccountStore.java'
+        ]
+        def missingLauncherClasses = requiredLauncherClasses.findAll {
+            !file("launcher/src/main/java/dev/liquidcopy/launcher/${it}").isFile()
+        }
+        if (!missingLauncherClasses.empty) {
+            throw new GradleException("Standalone launcher components are missing: ${missingLauncherClasses}")
+        }
+
+        if (System.getProperty('os.name', '').toLowerCase(Locale.ROOT).contains('windows')) {
+            def runtimeHome = file('launcher/build/bundled-runtime')
+            def runtimeJava = new File(runtimeHome, 'bin/java.exe')
+            def runtimeJavaw = new File(runtimeHome, 'bin/javaw.exe')
+            if (!runtimeJava.isFile() || !runtimeJavaw.isFile()) {
+                throw new GradleException("Bundled Windows Java runtime is incomplete: ${runtimeHome}")
+            }
+
+            def versionProcess = new ProcessBuilder(runtimeJava.absolutePath, '-version')
+                .redirectErrorStream(true).start()
+            def versionOutput = versionProcess.inputStream.getText('UTF-8')
+            if (!versionProcess.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+                || versionProcess.exitValue() != 0 || !versionOutput.contains('version "21.')) {
+                throw new GradleException("Bundled runtime is not Java 21: ${versionOutput.strip()}")
+            }
+
+            def moduleProcess = new ProcessBuilder(runtimeJava.absolutePath, '--list-modules')
+                .redirectErrorStream(true).start()
+            def moduleOutput = moduleProcess.inputStream.getText('UTF-8')
+            if (!moduleProcess.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+                || moduleProcess.exitValue() != 0
+                || !moduleOutput.contains('java.instrument@')
+                || !moduleOutput.contains('java.desktop@')
+                || !moduleOutput.contains('java.net.http@')
+                || !moduleOutput.contains('jdk.httpserver@')
+                || !moduleOutput.contains('jdk.unsupported@')) {
+                throw new GradleException('Bundled runtime is missing launcher/game modules')
+            }
+
+            def launcherJar = project(':launcher').tasks.named('fatJar').get().archiveFile.get().asFile
+            def helpProcess = new ProcessBuilder(runtimeJava.absolutePath, '-jar', launcherJar.absolutePath, '--help')
+                .redirectErrorStream(true).start()
+            def helpOutput = helpProcess.inputStream.getText('UTF-8')
+            if (!helpProcess.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+                || helpProcess.exitValue() != 0 || !helpOutput.contains('Standalone LiquidCopy launcher')) {
+                throw new GradleException("Bundled runtime could not start the launcher: ${helpOutput.strip()}")
+            }
+            logger.lifecycle("Bundled runtime: PASS (${versionOutput.readLines().first()}, launcher --help exit 0)")
+        }
+        logger.lifecycle('Standalone contract: PASS (Minecraft 1.21.11, direct OAuth/runtime, no loader metadata/dependencies/game classes/official-launcher handoff)')
     }
 }
 
 tasks.register('stageRelease', Sync) {
-    dependsOn ':bootstrap:fatJar', ':launcher:fatJar'
+    dependsOn ':bootstrap:fatJar', ':launcher:fatJar', ':launcher:bundleWindowsRuntime'
     into layout.buildDirectory.dir('release/LiquidCopy-1.21.11')
 
     from("bootstrap/build/libs/liquidcopy-bootstrap-${project.version}-all.jar") {
@@ -67,6 +134,9 @@ tasks.register('stageRelease', Sync) {
     }
     from("launcher/build/libs/liquidcopy-launcher-${project.version}-all.jar") {
         rename { 'LiquidCopy-Launcher.jar' }
+    }
+    from('launcher/build/bundled-runtime') {
+        into 'runtime'
     }
     from('README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md')
     from('.') {

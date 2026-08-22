@@ -8,6 +8,7 @@ base {
 
 dependencies {
     implementation "com.google.code.gson:gson:${gson_version}"
+    implementation "net.java.dev.jna:jna-platform:${jna_version}"
 
     testImplementation platform("org.junit:junit-bom:${junit_version}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -63,4 +64,78 @@ tasks.register('fatJar', Jar) {
 
 tasks.named('assemble') {
     dependsOn tasks.named('fatJar')
+}
+
+def windowsHost = System.getProperty('os.name', '').toLowerCase(Locale.ROOT).contains('windows')
+def bundledRuntimeModules = [
+    'java.base',
+    'java.compiler',
+    'java.datatransfer',
+    'java.desktop',
+    'java.instrument',
+    'java.logging',
+    'java.management',
+    'java.management.rmi',
+    'java.naming',
+    'java.net.http',
+    'java.prefs',
+    'java.rmi',
+    'java.scripting',
+    'java.security.jgss',
+    'java.security.sasl',
+    'java.smartcardio',
+    'java.sql',
+    'java.transaction.xa',
+    'java.xml',
+    'java.xml.crypto',
+    'jdk.charsets',
+    'jdk.crypto.cryptoki',
+    'jdk.crypto.ec',
+    'jdk.dynalink',
+    'jdk.httpserver',
+    'jdk.jfr',
+    'jdk.localedata',
+    'jdk.management',
+    'jdk.management.agent',
+    'jdk.management.jfr',
+    'jdk.naming.dns',
+    'jdk.naming.rmi',
+    'jdk.net',
+    'jdk.nio.mapmode',
+    'jdk.security.auth',
+    'jdk.security.jgss',
+    'jdk.unsupported',
+    'jdk.unsupported.desktop',
+    'jdk.xml.dom',
+    'jdk.zipfs'
+]
+def java21Runtime = javaToolchains.launcherFor {
+    languageVersion = JavaLanguageVersion.of(21)
+}
+def bundledRuntimeDirectory = layout.buildDirectory.dir('bundled-runtime')
+
+tasks.register('bundleWindowsRuntime', Exec) {
+    group = 'distribution'
+    description = 'Builds the stripped Java 21 runtime used by the Windows standalone release.'
+    onlyIf { windowsHost }
+    inputs.property('runtimeModules', bundledRuntimeModules.join(','))
+    inputs.property('javaInstallation', java21Runtime.map { it.metadata.installationPath.asFile.absolutePath })
+    outputs.dir(bundledRuntimeDirectory)
+    doFirst {
+        delete(bundledRuntimeDirectory)
+        File javaHome = java21Runtime.get().metadata.installationPath.asFile
+        File jlink = new File(javaHome, 'bin/jlink.exe')
+        if (!jlink.isFile()) {
+            throw new GradleException("Java 21 toolchain has no jlink executable: ${jlink}")
+        }
+        commandLine(
+            jlink.absolutePath,
+            '--add-modules', bundledRuntimeModules.join(','),
+            '--strip-debug',
+            '--no-header-files',
+            '--no-man-pages',
+            '--compress=zip-6',
+            '--output', bundledRuntimeDirectory.get().asFile.absolutePath
+        )
+    }
 }

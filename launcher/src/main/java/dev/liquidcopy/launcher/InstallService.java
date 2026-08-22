@@ -21,16 +21,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
-import java.time.Clock;
-import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-/** Installs and verifies the official named client profile plus the embedded LiquidCopy agent. */
+/** Installs and verifies the standalone named client metadata plus the embedded LiquidCopy agent. */
 public final class InstallService {
     public static final URI OFFICIAL_PROFILE_ZIP = URI.create(
         "https://piston-data.mojang.com/v1/objects/e11114e8a2eea43bac93c022c9327d3916b24738/1_21_11_unobfuscated.zip"
@@ -38,8 +35,6 @@ public final class InstallService {
     public static final String OFFICIAL_PROFILE_ZIP_SHA1 = "e11114e8a2eea43bac93c022c9327d3916b24738";
     public static final long OFFICIAL_PROFILE_ZIP_SIZE = 7_559L;
     public static final String OFFICIAL_NAMED_CLIENT_SHA1 = "4509ee9b65f226be61142d37bf05f8d28b03417b";
-    public static final String PROFILE_KEY = "LiquidCopy-1.21.11";
-    public static final String PROFILE_BACKUP_NAME = "launcher_profiles.json.liquidcopy.bak";
     public static final String INSTANCE_DIRECTORY = "instances/LiquidCopy-1.21.11";
     private static final String PROFILE_ENTRY = ProfileComposer.BASE_PROFILE_DIRECTORY + '/'
         + ProfileComposer.BASE_PROFILE_DIRECTORY + ".json";
@@ -48,27 +43,24 @@ public final class InstallService {
 
     private final ResourceFetcher fetcher;
     private final PayloadSource payloadSource;
-    private final Clock clock;
     private final ProfileComposer composer;
     private final URI profileZipUri;
     private final String profileZipSha1;
 
     public InstallService() {
-        this(httpFetcher(), embeddedPayload(), Clock.systemUTC(), LauncherMetadata.bootstrapVersion(),
+        this(httpFetcher(), embeddedPayload(), LauncherMetadata.bootstrapVersion(),
             OFFICIAL_PROFILE_ZIP, OFFICIAL_PROFILE_ZIP_SHA1);
     }
 
     public InstallService(
         ResourceFetcher fetcher,
         PayloadSource payloadSource,
-        Clock clock,
         String bootstrapVersion,
         URI profileZipUri,
         String profileZipSha1
     ) {
         this.fetcher = Objects.requireNonNull(fetcher, "fetcher");
         this.payloadSource = Objects.requireNonNull(payloadSource, "payloadSource");
-        this.clock = Objects.requireNonNull(clock, "clock");
         this.composer = new ProfileComposer(bootstrapVersion);
         this.profileZipUri = Objects.requireNonNull(profileZipUri, "profileZipUri");
         this.profileZipSha1 = Objects.requireNonNull(profileZipSha1, "profileZipSha1");
@@ -101,14 +93,14 @@ public final class InstallService {
         atomicWrite(baseProfilePath, prettyJson(baseProfile));
         atomicWrite(bootstrapPath, bootstrapBytes);
         atomicWrite(customProfilePath, prettyJson(customProfile));
-        Files.createDirectories(instanceDirectory(root));
-        Path launcherProfiles = mergeLauncherProfiles(root);
+        Path instance = instanceDirectory(root);
+        Files.createDirectories(instance);
 
         VerificationReport verification = verify(root);
         if (!verification.valid()) {
             throw new IOException("Installed files did not verify: " + String.join("; ", verification.messages()));
         }
-        return new InstallReport(root, baseProfilePath, customProfilePath, bootstrapPath, launcherProfiles,
+        return new InstallReport(root, baseProfilePath, customProfilePath, bootstrapPath, instance,
             verification.messages());
     }
 
@@ -125,7 +117,6 @@ public final class InstallService {
             .resolve(ProfileComposer.BASE_PROFILE_DIRECTORY + ".json");
         Path customPath = root.resolve("versions").resolve(ProfileComposer.CUSTOM_VERSION_ID)
             .resolve(ProfileComposer.CUSTOM_VERSION_ID + ".json");
-        Path profilesPath = root.resolve("launcher_profiles.json");
         boolean valid = true;
         try {
             JsonObject base = readObject(basePath, "official named profile");
@@ -160,69 +151,15 @@ public final class InstallService {
         }
 
         try {
-            JsonObject profiles = readObject(profilesPath, "launcher profiles");
-            JsonObject entries = profiles.getAsJsonObject("profiles");
-            if (entries == null || !entries.has(PROFILE_KEY)) {
-                throw new IOException("profile entry is missing");
-            }
-            JsonObject profile = entries.getAsJsonObject(PROFILE_KEY);
-            if (!ProfileComposer.CUSTOM_VERSION_ID.equals(ProfileComposer.requiredString(profile, "lastVersionId"))) {
-                throw new IOException("profile targets the wrong version");
-            }
-            String expectedGameDirectory = instanceDirectory(root).toString();
-            if (!expectedGameDirectory.equals(ProfileComposer.requiredString(profile, "gameDir"))) {
-                throw new IOException("profile targets the wrong game directory");
-            }
             if (!Files.isDirectory(instanceDirectory(root))) {
-                throw new IOException("isolated game directory is missing");
+                throw new IOException("game directory is missing");
             }
-            messages.add("Minecraft Launcher profile: OK");
+            messages.add("Standalone game directory: OK");
         } catch (Exception exception) {
             valid = false;
-            messages.add("Minecraft Launcher profile: " + exception.getMessage());
+            messages.add("Standalone game directory: " + exception.getMessage());
         }
         return new VerificationReport(valid, List.copyOf(messages));
-    }
-
-    private Path mergeLauncherProfiles(Path root) throws IOException {
-        Path profilesPath = root.resolve("launcher_profiles.json");
-        JsonObject document;
-        if (Files.exists(profilesPath)) {
-            byte[] original = Files.readAllBytes(profilesPath);
-            document = parseObject(original, "launcher profiles");
-            atomicWrite(root.resolve(PROFILE_BACKUP_NAME), original);
-        } else {
-            document = new JsonObject();
-        }
-
-        JsonObject profiles;
-        JsonElement profilesElement = document.get("profiles");
-        if (profilesElement == null || profilesElement.isJsonNull()) {
-            profiles = new JsonObject();
-            document.add("profiles", profiles);
-        } else if (profilesElement.isJsonObject()) {
-            profiles = profilesElement.getAsJsonObject();
-        } else {
-            throw new IOException("launcher_profiles.json has a non-object profiles field");
-        }
-
-        String now = DateTimeFormatter.ISO_INSTANT.format(Instant.now(clock));
-        JsonElement previousProfile = profiles.get(PROFILE_KEY);
-        JsonObject profile = previousProfile != null && previousProfile.isJsonObject()
-            ? previousProfile.getAsJsonObject().deepCopy()
-            : new JsonObject();
-        if (!profile.has("created") || !profile.get("created").isJsonPrimitive()) {
-            profile.addProperty("created", now);
-        }
-        profile.addProperty("icon", "Grass");
-        profile.addProperty("lastUsed", now);
-        profile.addProperty("lastVersionId", ProfileComposer.CUSTOM_VERSION_ID);
-        profile.addProperty("name", "LiquidCopy 1.21.11");
-        profile.addProperty("type", "custom");
-        profile.addProperty("gameDir", instanceDirectory(root).toString());
-        profiles.add(PROFILE_KEY, profile);
-        atomicWrite(profilesPath, prettyJson(document));
-        return profilesPath;
     }
 
     private ProfileComposer.BootstrapArtifact bootstrapDescriptor(JsonObject custom) throws IOException {
@@ -413,11 +350,11 @@ public final class InstallService {
     }
 
     public record InstallReport(
-        Path minecraftDirectory,
+        Path dataDirectory,
         Path baseProfile,
         Path customProfile,
         Path bootstrap,
-        Path launcherProfiles,
+        Path instanceDirectory,
         List<String> messages
     ) {
     }
