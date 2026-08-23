@@ -346,9 +346,6 @@ public final class MicrosoftAuthService {
         body.add("Properties", properties);
         body.addProperty("RelyingParty", "rp://api.minecraftservices.com/");
         body.addProperty("TokenType", "JWT");
-        JsonArray optionalClaims = new JsonArray();
-        optionalClaims.add("xid");
-        properties.add("OptionalDisplayClaims", optionalClaims);
         JsonResponse response = postXboxJson(config.xstsAuthorizationEndpoint(), body);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             long xerr = optionalLong(response.json(), "XErr", -1L);

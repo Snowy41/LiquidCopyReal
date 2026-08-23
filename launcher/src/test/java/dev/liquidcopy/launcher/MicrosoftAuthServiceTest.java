@@ -91,9 +91,8 @@ class MicrosoftAuthServiceTest {
         assertEquals(authorize.get("redirect_uri"), tokenForm.get("redirect_uri"));
         assertEquals(authorize.get("code_challenge"), challenge(tokenForm.get("code_verifier")));
         assertFalse(tokenForm.containsKey("client_secret"));
-        JsonArray optionalDisplayClaims = transport.xstsRequest.get().getAsJsonObject("Properties")
-            .getAsJsonArray("OptionalDisplayClaims");
-        assertEquals(List.of("xid"), List.of(optionalDisplayClaims.get(0).getAsString()));
+        assertFalse(transport.xstsRequest.get().getAsJsonObject("Properties")
+            .has("OptionalDisplayClaims"));
 
         int requestsBeforeReuse = transport.requests.size();
         assertEquals(account, service.accountForLaunch(progress::add).orElseThrow());
@@ -152,7 +151,7 @@ class MicrosoftAuthServiceTest {
     }
 
     @Test
-    void uhsOnlyXstsResponseStillCreatesAValidSessionWithEmptyXuid() throws Exception {
+    void minimalXstsRequestAndUhsOnlyResponseCreateAValidSessionWithEmptyXuid() throws Exception {
         MicrosoftAuthConfig config = testConfig();
         MockTransport transport = new MockTransport(config, List.of("game_minecraft"), false);
         MicrosoftAuthService service = service(config, transport, completingBrowser(), directory.resolve("no-xid"));
@@ -160,9 +159,8 @@ class MicrosoftAuthServiceTest {
         MinecraftAccount account = service.loginWithBrowser(update -> { });
 
         assertEquals("", account.xuid());
-        JsonArray requested = transport.xstsRequest.get().getAsJsonObject("Properties")
-            .getAsJsonArray("OptionalDisplayClaims");
-        assertEquals("xid", requested.get(0).getAsString());
+        assertFalse(transport.xstsRequest.get().getAsJsonObject("Properties")
+            .has("OptionalDisplayClaims"));
         assertTrue(transport.requests.stream()
             .anyMatch(request -> request.uri().equals(config.minecraftAuthenticationEndpoint())));
     }
