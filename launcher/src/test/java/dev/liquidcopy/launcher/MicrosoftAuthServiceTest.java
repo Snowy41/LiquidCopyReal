@@ -83,6 +83,7 @@ class MicrosoftAuthServiceTest {
         assertEquals("code", authorize.get("response_type"));
         assertEquals("query", authorize.get("response_mode"));
         assertEquals("S256", authorize.get("code_challenge_method"));
+        assertEquals("select_account", authorize.get("prompt"));
         assertEquals("localhost", URI.create(authorize.get("redirect_uri")).getHost());
         assertTrue(URI.create(authorize.get("redirect_uri")).getPort() > 0);
         Map<String, String> tokenForm = transport.authorizationCodeForm.get();

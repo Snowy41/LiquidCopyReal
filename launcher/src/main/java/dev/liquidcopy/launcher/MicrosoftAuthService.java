@@ -200,6 +200,9 @@ public final class MicrosoftAuthService {
         query.put("scope", config.scopes());
         query.put("code_challenge", challenge);
         query.put("code_challenge_method", "S256");
+        // Use the account chooser from the real system browser. Microsoft can reuse that browser's
+        // existing login.live.com / microsoftonline.com session cookies without exposing them here.
+        query.put("prompt", "select_account");
         query.put("state", state);
         return URI.create(config.authorizationEndpoint().toASCIIString() + "?" + formEncode(query));
     }

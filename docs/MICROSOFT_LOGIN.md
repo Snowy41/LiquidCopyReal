@@ -9,6 +9,13 @@ in the operating system's default browser, so existing Microsoft website
 cookies and browser-based account selection continue to work. The callback is
 received only by a temporary loopback listener on this computer.
 
+The authorization request explicitly uses `prompt=select_account`. Microsoft
+therefore shows the browser's existing account chooser and can reuse a valid
+session already stored by that browser. Netscape-format cookie-export text
+files are website bearer sessions, not Minecraft access or refresh tokens;
+LiquidCopy never parses or injects them. The supported path is to keep the
+account signed in inside the selected default browser.
+
 ## Register the desktop application
 
 1. Open the Microsoft Entra admin center and create a new **App registration**.
@@ -29,7 +36,7 @@ received only by a temporary loopback listener on this computer.
 
 1. Start `LiquidCopy-Launcher.jar` or `Launch LiquidCopy.cmd`.
 2. Paste the Application (client) ID into **Microsoft application ID**.
-3. Click **Save settings**, then **Sign in with Microsoft**.
+3. Click **Save settings**, then **Use browser Microsoft account**.
 4. Complete the Microsoft page in the browser. Existing browser cookies can
    select or authenticate an already signed-in account.
    If the browser association fails, use **Copy sign-in URL** and paste it into

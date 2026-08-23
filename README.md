@@ -38,7 +38,7 @@ Artifacts:
 3. Keep or change the launcher-owned data directory and choose the maximum game
    memory.
 4. Paste your registered Microsoft application (client) ID, then click
-   **Sign in with Microsoft**. Authentication opens in the system browser and
+   **Use browser Microsoft account**. Authentication opens in the system browser and
    returns to LiquidCopy through a temporary loopback callback. While waiting,
    the launcher offers **Cancel sign-in** and **Copy sign-in URL**.
 5. Click **Install / Update**, then **Play**. The custom launcher resolves and

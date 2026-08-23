@@ -55,7 +55,7 @@ final class LauncherFrame extends JFrame {
     private final JButton browse = new JButton("Browse…");
     private final JButton registration = new JButton("Register application…");
     private final JButton saveSettings = new JButton("Save settings");
-    private final JButton signIn = new JButton("Sign in with Microsoft");
+    private final JButton signIn = new JButton("Use browser Microsoft account");
     private final JButton cancelSignIn = new JButton("Cancel sign-in");
     private final JButton copySignInUrl = new JButton("Copy sign-in URL");
     private final JButton signOut = new JButton("Sign out");
@@ -168,7 +168,8 @@ final class LauncherFrame extends JFrame {
         memory.add(new JLabel(" MiB maximum"));
         addRow(panel, constraints, 3, "Game memory", memory, saveSettings);
 
-        JLabel help = new JLabel("<html>Use the distributor's own public desktop-app ID with the "
+        JLabel help = new JLabel("<html>Uses the account chooser and signed-in cookies from your default browser. "
+            + "Cookie-export text files are not Minecraft access tokens. Use the distributor's public desktop-app ID with the "
             + "<b>http://localhost</b> redirect URI. It must be accepted for Xbox Live/Minecraft Services; "
             + "do not borrow another launcher's ID. Credentials are entered only in your system browser.</html>");
         constraints.gridx = 1;
