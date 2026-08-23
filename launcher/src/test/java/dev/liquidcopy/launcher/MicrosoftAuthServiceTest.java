@@ -168,6 +168,32 @@ class MicrosoftAuthServiceTest {
     }
 
     @Test
+    void reportsTheXboxXerrAndAccountActionWithoutHidingTheFailureReason() throws Exception {
+        MicrosoftAuthConfig config = testConfig();
+        MockTransport success = new MockTransport(config);
+        AuthHttpTransport transport = request -> {
+            if (!request.uri().equals(config.xstsAuthorizationEndpoint())) {
+                return success.send(request);
+            }
+            JsonObject error = new JsonObject();
+            error.addProperty("XErr", 2148916233L);
+            error.addProperty("Message", "The account does not have an Xbox profile.");
+            error.addProperty("Redirect", "https://start.ui.xboxlive.com/AddChildToFamily");
+            return MockTransport.json(401, error);
+        };
+        MicrosoftAuthService service = service(config, transport, completingBrowser(), directory.resolve("xerr"));
+
+        MicrosoftAuthException failure = assertThrows(MicrosoftAuthException.class,
+            () -> service.loginWithBrowser(update -> { }));
+
+        assertEquals("xsts_authorization_failed", failure.code());
+        assertEquals(401, failure.httpStatus());
+        assertTrue(failure.getMessage().contains("XErr=2148916233"));
+        assertTrue(failure.getMessage().contains("needs an Xbox profile and gamertag"));
+        assertTrue(failure.getMessage().contains("https://start.ui.xboxlive.com/AddChildToFamily"));
+    }
+
+    @Test
     void reportsInvalidPublicClientRegistrationClearly() throws Exception {
         MicrosoftAuthConfig config = testConfig();
         AuthHttpTransport transport = request -> {

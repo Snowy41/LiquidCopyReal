@@ -263,6 +263,8 @@ public final class MicrosoftAuthService {
         throws IOException, InterruptedException {
         emit(listener, AuthProgress.of(AuthStage.AUTHENTICATING_XBOX, "Authenticating with Xbox Live…"));
         XboxToken userToken = authenticateXboxUser(microsoft.accessToken());
+        emit(listener, AuthProgress.of(AuthStage.AUTHENTICATING_XBOX,
+            "Xbox Live identity accepted; requesting the Minecraft security token…"));
         XboxToken xsts = authorizeXsts(userToken.token());
         if (!userToken.userHash().equals(xsts.userHash())) {
             throw new MicrosoftAuthException("xbox_identity_mismatch", "Xbox authentication identity mismatch");
@@ -350,19 +352,33 @@ public final class MicrosoftAuthService {
         JsonResponse response = postXboxJson(config.xstsAuthorizationEndpoint(), body);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
             long xerr = optionalLong(response.json(), "XErr", -1L);
-            String message;
+            String explanation;
             if (xerr == 2148916233L) {
-                message = "This Microsoft account needs an Xbox profile before it can play Minecraft";
+                explanation = "This Microsoft account needs an Xbox profile and gamertag before it can play Minecraft";
             } else if (xerr == 2148916235L) {
-                message = "Xbox Live is unavailable for this account's region";
+                explanation = "Xbox Live is unavailable for this account's region";
             } else if (xerr == 2148916236L || xerr == 2148916237L) {
-                message = "This Xbox account requires adult verification";
+                explanation = "This Xbox account requires adult verification";
             } else if (xerr == 2148916238L) {
-                message = "This child account must be added to a Microsoft family by an adult";
+                explanation = "This child account must be added to a Microsoft family by an adult";
             } else {
-                message = "Xbox security-token authorization failed";
+                explanation = "Xbox security-token authorization failed";
             }
-            throw new MicrosoftAuthException("xsts_authorization_failed", message, response.statusCode());
+            StringBuilder message = new StringBuilder(explanation)
+                .append(" (HTTP ").append(response.statusCode());
+            if (xerr >= 0) {
+                message.append(", XErr=").append(xerr);
+            }
+            message.append(')');
+            String serviceMessage = optionalString(response.json(), "Message");
+            if (!serviceMessage.isBlank()) {
+                message.append(". Xbox: ").append(sanitizeMessage(serviceMessage, "No service detail"));
+            }
+            String redirect = optionalString(response.json(), "Redirect");
+            if (!redirect.isBlank()) {
+                message.append(". Account action: ").append(sanitizeMessage(redirect, "Open Xbox account settings"));
+            }
+            throw new MicrosoftAuthException("xsts_authorization_failed", message.toString(), response.statusCode());
         }
         return parseXboxToken(response.json());
     }
