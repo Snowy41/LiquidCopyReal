@@ -20,12 +20,10 @@ class LauncherMainTest {
     void parsesStandaloneDataAccountAndMemoryOptions() {
         LauncherMain.CliOptions options = LauncherMain.parseOptions(new String[] {
             "--data-dir", "custom-root",
-            "--client-id", "12345678-1234-1234-1234-123456789abc",
             "--memory", "6144"
         });
 
         assertEquals(Path.of("custom-root").toAbsolutePath().normalize(), options.dataDirectory());
-        assertEquals("12345678-1234-1234-1234-123456789abc", options.clientId());
         assertEquals(6144, options.maxMemoryMiB());
     }
 

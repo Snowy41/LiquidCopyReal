@@ -33,17 +33,12 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /** Standalone account, installation, and direct-launch UI. */
 final class LauncherFrame extends JFrame {
-    private static final URI APP_REGISTRATION_URI = URI.create(
-        "https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade"
-    );
     private static final int MAX_LOG_CHARACTERS = 250_000;
 
     private final InstallService installService;
     private final DirectLaunchService launchService;
     private final LauncherOpener opener;
-    private final SystemBrowser browser;
     private final JTextField directory = new JTextField(MinecraftDirectories.defaultDirectory().toString(), 42);
-    private final JTextField clientId = new JTextField(38);
     private final JSpinner maxMemory = new JSpinner(new SpinnerNumberModel(
         LauncherSettings.DEFAULT_MEMORY_MIB,
         LauncherSettings.MIN_MEMORY_MIB,
@@ -53,7 +48,6 @@ final class LauncherFrame extends JFrame {
     private final JLabel accountStatus = new JLabel("Not signed in");
     private final JTextArea log = new JTextArea();
     private final JButton browse = new JButton("Browse…");
-    private final JButton registration = new JButton("Register application…");
     private final JButton saveSettings = new JButton("Save settings");
     private final JButton signIn = new JButton("Use browser Microsoft account");
     private final JButton cancelSignIn = new JButton("Cancel sign-in");
@@ -73,20 +67,18 @@ final class LauncherFrame extends JFrame {
     private boolean authenticationBusy;
 
     LauncherFrame(InstallService installService) {
-        this(installService, new DirectLaunchService(), LauncherOpener.system(), SystemBrowser.desktop());
+        this(installService, new DirectLaunchService(), LauncherOpener.system());
     }
 
     LauncherFrame(
         InstallService installService,
         DirectLaunchService launchService,
-        LauncherOpener opener,
-        SystemBrowser browser
+        LauncherOpener opener
     ) {
         super("LiquidCopy 1.21.11");
         this.installService = Objects.requireNonNull(installService, "installService");
         this.launchService = Objects.requireNonNull(launchService, "launchService");
         this.opener = Objects.requireNonNull(opener, "opener");
-        this.browser = Objects.requireNonNull(browser, "browser");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setMinimumSize(new Dimension(840, 610));
         setLocationByPlatform(true);
@@ -129,7 +121,6 @@ final class LauncherFrame extends JFrame {
 
         browse.addActionListener(event -> chooseDirectory());
         directory.addActionListener(event -> loadSelectedContext());
-        registration.addActionListener(event -> openRegistrationPage());
         signIn.addActionListener(event -> signIn());
         cancelSignIn.addActionListener(event -> cancelSignIn());
         copySignInUrl.addActionListener(event -> copySignInUrl());
@@ -138,7 +129,7 @@ final class LauncherFrame extends JFrame {
         verify.addActionListener(event -> verify());
         play.addActionListener(event -> play());
         saveSettings.addActionListener(event -> saveSettings());
-        openInstance.addActionListener(event -> executeWithContext("Open game folder", false, context -> {
+        openInstance.addActionListener(event -> executeWithContext("Open game folder", context -> {
             opener.openInstanceDirectory(context.dataDirectory());
             return "Opened " + InstallService.instanceDirectory(context.dataDirectory());
         }));
@@ -154,26 +145,23 @@ final class LauncherFrame extends JFrame {
         constraints.fill = GridBagConstraints.HORIZONTAL;
 
         addRow(panel, constraints, 0, "LiquidCopy data directory", directory, browse);
-        addRow(panel, constraints, 1, "Microsoft application (client) ID", clientId, registration);
-
         JPanel accountActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         accountActions.add(signIn);
         accountActions.add(cancelSignIn);
         accountActions.add(signOut);
         accountActions.add(copySignInUrl);
-        addRow(panel, constraints, 2, "Account", accountStatus, accountActions);
+        addRow(panel, constraints, 1, "Account", accountStatus, accountActions);
 
         JPanel memory = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         memory.add(maxMemory);
         memory.add(new JLabel(" MiB maximum"));
-        addRow(panel, constraints, 3, "Game memory", memory, saveSettings);
+        addRow(panel, constraints, 2, "Game memory", memory, saveSettings);
 
         JLabel help = new JLabel("<html>Uses the account chooser and signed-in cookies from your default browser. "
-            + "Cookie-export text files are not Minecraft access tokens. Use the distributor's public desktop-app ID with the "
-            + "<b>http://localhost</b> redirect URI. It must be accepted for Xbox Live/Minecraft Services; "
-            + "do not borrow another launcher's ID. Credentials are entered only in your system browser.</html>");
+            + "Cookie-export text files are not Minecraft access tokens. LiquidCopy uses its built-in public desktop-app "
+            + "registration with the <b>http://localhost</b> redirect URI. Credentials are entered only in your system browser.</html>");
         constraints.gridx = 1;
-        constraints.gridy = 4;
+        constraints.gridy = 3;
         constraints.gridwidth = 2;
         constraints.weightx = 1;
         panel.add(help, constraints);
@@ -211,17 +199,9 @@ final class LauncherFrame extends JFrame {
         }
     }
 
-    private void openRegistrationPage() {
-        execute("Open application registration", () -> {
-            browser.open(APP_REGISTRATION_URI);
-            return "Opened Microsoft Entra application registrations. Configure a public desktop application "
-                + "with the http://localhost redirect URI, then paste its application ID above.";
-        });
-    }
-
     private void signIn() {
         latestAuthorizationUri = null;
-        executeWithContext("Microsoft sign-in", true, true, context -> {
+        executeWithContext("Microsoft sign-in", true, context -> {
             context.settings().save(context.dataDirectory());
             MinecraftAccount signedIn = authService(context).loginWithBrowser(this::reportAuthProgress);
             setAccount(signedIn, context.dataDirectory());
@@ -253,25 +233,15 @@ final class LauncherFrame extends JFrame {
     }
 
     private void signOut() {
-        executeWithContext("Sign out", false, context -> {
-            String effectiveClientId = context.settings().microsoftClientId();
-            MinecraftAccount current = accountFor(context.dataDirectory()).orElse(null);
-            if (effectiveClientId.isBlank() && current != null) {
-                effectiveClientId = current.clientId();
-            }
-            if (effectiveClientId.isBlank()) {
-                AccountStore.inDirectory(context.dataDirectory()).clear();
-            } else {
-                MicrosoftAuthService.create(context.dataDirectory(), new MicrosoftAuthConfig(effectiveClientId))
-                    .logout();
-            }
+        executeWithContext("Sign out", context -> {
+            MicrosoftAuthService.create(context.dataDirectory(), MicrosoftAuthConfig.defaultConfig()).logout();
             setAccount(null, context.dataDirectory());
             return "Local Microsoft session removed.";
         });
     }
 
     private void install() {
-        executeWithContext("Install / Update", false, context -> {
+        executeWithContext("Install / Update", context -> {
             context.settings().save(context.dataDirectory());
             InstallService.InstallReport report = installService.install(context.dataDirectory());
             return "Installed " + ProfileComposer.CUSTOM_VERSION_ID + " in " + report.dataDirectory() + "\n"
@@ -281,7 +251,7 @@ final class LauncherFrame extends JFrame {
     }
 
     private void verify() {
-        executeWithContext("Verify", false, context -> {
+        executeWithContext("Verify", context -> {
             context.settings().save(context.dataDirectory());
             InstallService.VerificationReport report = installService.verify(context.dataDirectory());
             return (report.valid() ? "Verification succeeded" : "Verification failed") + "\n"
@@ -290,12 +260,12 @@ final class LauncherFrame extends JFrame {
     }
 
     private void play() {
-        executeWithContext("Play", true, context -> {
+        executeWithContext("Play", context -> {
             context.settings().save(context.dataDirectory());
             MinecraftAccount launchAccount = authService(context).accountForLaunch(this::reportAuthProgress)
                 .orElseThrow(() -> new IllegalStateException("Sign in with Microsoft before playing."));
-            if (!launchAccount.clientId().equals(context.settings().microsoftClientId())) {
-                throw new IllegalStateException("The application ID changed. Sign out and sign in again.");
+            if (!launchAccount.clientId().equals(MicrosoftAuthConfig.CLIENT_ID)) {
+                throw new IllegalStateException("The saved account belongs to an older LiquidCopy build. Sign out and sign in again.");
             }
             setAccount(launchAccount, context.dataDirectory());
 
@@ -322,7 +292,7 @@ final class LauncherFrame extends JFrame {
     }
 
     private void saveSettings() {
-        executeWithContext("Save settings", false, context -> {
+        executeWithContext("Save settings", context -> {
             context.settings().save(context.dataDirectory());
             return "Saved launcher settings to " + LauncherSettings.settingsFile(context.dataDirectory()) + ".";
         });
@@ -355,24 +325,17 @@ final class LauncherFrame extends JFrame {
     }
 
     private MicrosoftAuthService authService(LauncherContext context) {
-        String id = context.settings().microsoftClientId();
-        if (id.isBlank()) {
-            throw new IllegalStateException("Enter your Microsoft application (client) ID first.");
-        }
-        return MicrosoftAuthService.create(context.dataDirectory(), new MicrosoftAuthConfig(id));
+        return MicrosoftAuthService.create(context.dataDirectory(), MicrosoftAuthConfig.defaultConfig());
     }
 
-    private LauncherContext captureContext(boolean requireClientId) {
+    private LauncherContext captureContext() {
         Path root = selectedDirectory();
         try {
             maxMemory.commitEdit();
         } catch (java.text.ParseException exception) {
             throw new IllegalArgumentException("Game memory is not a number", exception);
         }
-        LauncherSettings settings = new LauncherSettings(clientId.getText(), ((Number) maxMemory.getValue()).intValue());
-        if (requireClientId && settings.microsoftClientId().isBlank()) {
-            throw new IllegalStateException("Enter your Microsoft application (client) ID first.");
-        }
+        LauncherSettings settings = new LauncherSettings(((Number) maxMemory.getValue()).intValue());
         return new LauncherContext(root, settings);
     }
 
@@ -408,11 +371,6 @@ final class LauncherFrame extends JFrame {
                         return;
                     }
                     LoadedContext loaded = get();
-                    String id = loaded.settings().microsoftClientId();
-                    if (id.isBlank() && loaded.account().isPresent()) {
-                        id = loaded.account().get().clientId();
-                    }
-                    clientId.setText(id);
                     maxMemory.setValue(loaded.settings().maxMemoryMiB());
                     setAccount(loaded.account().orElse(null), root);
                     appendLog(loaded.account().isPresent()
@@ -500,18 +458,17 @@ final class LauncherFrame extends JFrame {
         worker.execute();
     }
 
-    private void executeWithContext(String label, boolean requireClientId, ContextOperation operation) {
-        executeWithContext(label, requireClientId, false, operation);
+    private void executeWithContext(String label, ContextOperation operation) {
+        executeWithContext(label, false, operation);
     }
 
     private void executeWithContext(
         String label,
-        boolean requireClientId,
         boolean cancellableAuthentication,
         ContextOperation operation
     ) {
         try {
-            LauncherContext context = captureContext(requireClientId);
+            LauncherContext context = captureContext();
             execute(label, () -> operation.call(context), cancellableAuthentication);
         } catch (RuntimeException exception) {
             appendLog(label + " failed: " + message(exception));
@@ -529,7 +486,6 @@ final class LauncherFrame extends JFrame {
         install.setEnabled(!busy);
         verify.setEnabled(!busy);
         browse.setEnabled(!busy);
-        registration.setEnabled(!busy);
         saveSettings.setEnabled(!busy);
         signIn.setEnabled(!busy);
         cancelSignIn.setEnabled(busy && authenticationBusy && activeWorker != null);
@@ -538,7 +494,6 @@ final class LauncherFrame extends JFrame {
         play.setEnabled(!busy && signedIn && !gameRunning);
         openInstance.setEnabled(!busy);
         directory.setEnabled(!busy);
-        clientId.setEnabled(!busy);
         maxMemory.setEnabled(!busy);
     }
 

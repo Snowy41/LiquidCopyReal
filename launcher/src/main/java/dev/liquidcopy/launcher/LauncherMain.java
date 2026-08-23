@@ -34,7 +34,6 @@ public final class LauncherMain {
             Path dataDirectory = options.dataDirectory();
             LauncherSettings saved = LauncherSettings.load(dataDirectory);
             LauncherSettings settings = new LauncherSettings(
-                options.clientId() == null ? saved.microsoftClientId() : options.clientId(),
                 options.maxMemoryMiB() == null ? saved.maxMemoryMiB() : options.maxMemoryMiB()
             );
             InstallService installer = new InstallService();
@@ -84,7 +83,6 @@ public final class LauncherMain {
     }
 
     private static int login(Path dataDirectory, LauncherSettings settings, PrintStream output) throws Exception {
-        requireClientId(settings);
         settings.save(dataDirectory);
         MinecraftAccount account = authService(dataDirectory, settings).loginWithBrowser(
             progress -> output.println("AUTH " + progress.stage() + ": " + progress.message())
@@ -117,14 +115,13 @@ public final class LauncherMain {
         LauncherSettings settings,
         PrintStream output
     ) throws Exception {
-        requireClientId(settings);
         settings.save(dataDirectory);
         MicrosoftAuthService auth = authService(dataDirectory, settings);
         MinecraftAccount account = auth.accountForLaunch(
             progress -> output.println("AUTH " + progress.stage() + ": " + progress.message())
         ).orElseThrow(() -> new IllegalStateException("No Microsoft account is saved; run login first"));
-        if (!account.clientId().equals(settings.microsoftClientId())) {
-            throw new IllegalStateException("The Microsoft application ID changed; run logout, then login");
+        if (!account.clientId().equals(MicrosoftAuthConfig.CLIENT_ID)) {
+            throw new IllegalStateException("The saved account belongs to an older LiquidCopy build; run logout, then login");
         }
 
         InstallService.VerificationReport verification = installer.verify(dataDirectory);
@@ -150,13 +147,7 @@ public final class LauncherMain {
     }
 
     private static MicrosoftAuthService authService(Path dataDirectory, LauncherSettings settings) {
-        return MicrosoftAuthService.create(dataDirectory, new MicrosoftAuthConfig(settings.microsoftClientId()));
-    }
-
-    private static void requireClientId(LauncherSettings settings) {
-        if (settings.microsoftClientId().isBlank()) {
-            throw new IllegalStateException("Microsoft application ID is missing; use --client-id or set it in the GUI");
-        }
+        return MicrosoftAuthService.create(dataDirectory, MicrosoftAuthConfig.defaultConfig());
     }
 
     static String canonicalCommand(String command) {
@@ -171,7 +162,6 @@ public final class LauncherMain {
 
     static CliOptions parseOptions(String[] args) {
         Path dataDirectory = MinecraftDirectories.defaultDirectory();
-        String clientId = null;
         Integer memory = null;
         for (int index = 0; index < args.length; index++) {
             String option = args[index];
@@ -182,12 +172,6 @@ public final class LauncherMain {
                     }
                     dataDirectory = Path.of(args[index]);
                 }
-                case "--client-id" -> {
-                    if (++index >= args.length) {
-                        throw new IllegalArgumentException("--client-id requires an application ID");
-                    }
-                    clientId = args[index];
-                }
                 case "--memory" -> {
                     if (++index >= args.length) {
                         throw new IllegalArgumentException("--memory requires MiB");
@@ -197,7 +181,7 @@ public final class LauncherMain {
                 default -> throw new IllegalArgumentException("Unknown option: " + option);
             }
         }
-        return new CliOptions(dataDirectory.toAbsolutePath().normalize(), clientId, memory);
+        return new CliOptions(dataDirectory.toAbsolutePath().normalize(), memory);
     }
 
     private static void printUsage(PrintStream output) {
@@ -206,12 +190,12 @@ public final class LauncherMain {
         output.println("  java -jar LiquidCopy-Launcher.jar [gui]");
         output.println("  java -jar LiquidCopy-Launcher.jar install [--data-dir PATH]");
         output.println("  java -jar LiquidCopy-Launcher.jar verify  [--data-dir PATH]");
-        output.println("  java -jar LiquidCopy-Launcher.jar login   [--data-dir PATH] [--client-id ID]");
+        output.println("  java -jar LiquidCopy-Launcher.jar login   [--data-dir PATH]");
         output.println("  java -jar LiquidCopy-Launcher.jar account [--data-dir PATH]");
         output.println("  java -jar LiquidCopy-Launcher.jar logout  [--data-dir PATH]");
-        output.println("  java -jar LiquidCopy-Launcher.jar play    [--data-dir PATH] [--client-id ID] [--memory MiB]");
+        output.println("  java -jar LiquidCopy-Launcher.jar play    [--data-dir PATH] [--memory MiB]");
         output.println("  (--install, --verify, and --play are accepted aliases.)");
     }
 
-    record CliOptions(Path dataDirectory, String clientId, Integer maxMemoryMiB) { }
+    record CliOptions(Path dataDirectory, Integer maxMemoryMiB) { }
 }

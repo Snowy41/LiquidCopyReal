@@ -16,39 +16,25 @@ files are website bearer sessions, not Minecraft access or refresh tokens;
 LiquidCopy never parses or injects them. The supported path is to keep the
 account signed in inside the selected default browser.
 
-## Register the desktop application
+## Distributor registration
 
-1. Open the Microsoft Entra admin center and create a new **App registration**.
-2. Name it `LiquidCopy Launcher`.
-3. Select an account audience that includes **personal Microsoft accounts**.
-   The `consumers` authority used by LiquidCopy accepts personal accounts only.
-4. Under **Authentication**, add the **Mobile and desktop applications**
-   platform with the system-browser redirect URI `http://localhost`.
-5. Treat it as a public/native client. Do not create or put a client secret in
-   the launcher; PKCE proves the authorization request instead.
-6. Ensure the distributor's registration is accepted/enabled for Xbox Live and
-   Minecraft Services. An arbitrary generic Entra registration is not
-   automatically sufficient.
-7. Copy the registration's **Application (client) ID**. Use your own
-   distributor registration; do not copy another launcher's client ID.
+LiquidCopy ships with the distributor-owned public desktop Application ID.
+Users never create an Entra registration, paste an ID, or supply a client
+secret. The registration uses a personal-account audience and the
+`http://localhost` system-browser redirect URI.
 
 ## Configure and sign in
 
 1. Start `LiquidCopy-Launcher.jar` or `Launch LiquidCopy.cmd`.
-2. Paste the Application (client) ID into **Microsoft application ID**.
-3. Click **Save settings**, then **Use browser Microsoft account**.
-4. Complete the Microsoft page in the browser. Existing browser cookies can
+2. Click **Use browser Microsoft account**.
+3. Complete the Microsoft page in the browser. Existing browser cookies can
    select or authenticate an already signed-in account.
    If the browser association fails, use **Copy sign-in URL** and paste it into
    a browser. **Cancel sign-in** immediately stops the loopback wait.
-5. The browser returns to a one-time `http://localhost:<port>/` URL.
+4. The browser returns to a one-time `http://localhost:<port>/` URL.
    LiquidCopy validates the OAuth state and PKCE response, exchanges it through
    Xbox Live/XSTS and Minecraft Services, verifies game ownership, reads the
    Minecraft profile, and enables **Play**.
-
-The same client ID may alternatively be supplied with the
-`LIQUIDCOPY_MICROSOFT_CLIENT_ID` environment variable or the
-`-Dliquidcopy.microsoft.clientId=<id>` Java system property.
 
 ## Local files
 

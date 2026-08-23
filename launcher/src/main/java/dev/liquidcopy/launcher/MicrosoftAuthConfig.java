@@ -18,8 +18,8 @@ public record MicrosoftAuthConfig(
     Duration callbackTimeout,
     Duration requestTimeout
 ) {
-    public static final String CLIENT_ID_PROPERTY = "liquidcopy.microsoft.clientId";
-    public static final String CLIENT_ID_ENVIRONMENT = "LIQUIDCOPY_MICROSOFT_CLIENT_ID";
+    /** Public desktop OAuth application owned by the LiquidCopy distributor. */
+    public static final String CLIENT_ID = "cd7fcf88-1560-4508-9827-eaeecf644c7c";
     public static final String DEFAULT_SCOPES = "XboxLive.signin offline_access";
 
     public MicrosoftAuthConfig {
@@ -60,19 +60,8 @@ public record MicrosoftAuthConfig(
         );
     }
 
-    /**
-     * Resolves the registered public-client ID. The system property takes precedence over the environment.
-     */
-    public static MicrosoftAuthConfig fromEnvironment() {
-        String clientId = System.getProperty(CLIENT_ID_PROPERTY, "").trim();
-        if (clientId.isEmpty()) {
-            clientId = System.getenv().getOrDefault(CLIENT_ID_ENVIRONMENT, "").trim();
-        }
-        if (clientId.isEmpty()) {
-            throw new IllegalStateException("Microsoft OAuth client ID is not configured; set -D"
-                + CLIENT_ID_PROPERTY + "=<registered-public-client-id> or " + CLIENT_ID_ENVIRONMENT);
-        }
-        return new MicrosoftAuthConfig(clientId);
+    public static MicrosoftAuthConfig defaultConfig() {
+        return new MicrosoftAuthConfig(CLIENT_ID);
     }
 
     private static String requireText(String value, String name) {

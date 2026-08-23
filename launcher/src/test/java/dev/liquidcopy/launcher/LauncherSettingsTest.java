@@ -13,7 +13,7 @@ class LauncherSettingsTest {
 
     @Test
     void savesAndLoadsRootScopedSettings() throws Exception {
-        LauncherSettings expected = new LauncherSettings("12345678-1234-1234-1234-123456789abc", 6_144);
+        LauncherSettings expected = new LauncherSettings(6_144);
 
         expected.save(dataDirectory);
 

@@ -82,7 +82,7 @@ public final class MicrosoftAuthService {
 
     /** Uses the configured system property/environment public-client ID. */
     public static MicrosoftAuthService createDefault(java.nio.file.Path dataDirectory) {
-        return create(dataDirectory, MicrosoftAuthConfig.fromEnvironment());
+        return create(dataDirectory, MicrosoftAuthConfig.defaultConfig());
     }
 
     /** Uses an explicit registered public-client ID/configuration and persists below dataDirectory. */

@@ -37,33 +37,24 @@ Artifacts:
    system Java 21 runtime.
 3. Keep or change the launcher-owned data directory and choose the maximum game
    memory.
-4. Paste your registered Microsoft application (client) ID, then click
-   **Use browser Microsoft account**. Authentication opens in the system browser and
+4. Click **Use browser Microsoft account**. LiquidCopy uses its built-in public
+   desktop application ID. Authentication opens in the system browser and
    returns to LiquidCopy through a temporary loopback callback. While waiting,
    the launcher offers **Cancel sign-in** and **Copy sign-in URL**.
 5. Click **Install / Update**, then **Play**. The custom launcher resolves and
    starts Minecraft directly; no other launcher is opened.
 
-### One-time Microsoft application setup
+### Microsoft application setup
 
-The distributor of a LiquidCopy build must register a Microsoft Entra **public
-client/native desktop application** and use its own application ID. Configure a
-Mobile and desktop applications platform with `http://localhost` as a redirect
-URI and enable public-client flows. The registration must also be accepted or
-enabled for Xbox Live and Minecraft Services; a generic Entra registration is
-not automatically sufficient. Distributors must use their own registration and
-must not borrow another launcher's client ID. Paste the resulting **Application
-(client) ID** into the launcher's editable field; it is saved in
-`launcher-settings.json` under the selected data directory. The client ID is a
-public identifier, not a client secret. LiquidCopy uses authorization-code PKCE
-and never asks for a Microsoft password inside the application.
-
-The same ID can instead be supplied with
-`LIQUIDCOPY_MICROSOFT_CLIENT_ID` or
-`-Dliquidcopy.microsoft.clientId=<id>`.
+LiquidCopy ships with its distributor-owned Microsoft Entra **public
+client/native desktop application** ID. End users do not register applications,
+paste application IDs, or provide client secrets. The registration uses a
+Mobile and desktop applications platform with `http://localhost` as its redirect
+URI. LiquidCopy uses authorization-code PKCE and never asks for a Microsoft
+password inside the application.
 
 See [`docs/MICROSOFT_LOGIN.md`](docs/MICROSOFT_LOGIN.md) for the complete
-registration, browser-login, callback, and local-session procedure.
+browser-login, callback, and local-session procedure.
 
 Default launcher-owned data locations:
 
