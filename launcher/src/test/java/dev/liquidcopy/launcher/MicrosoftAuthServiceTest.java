@@ -192,6 +192,31 @@ class MicrosoftAuthServiceTest {
     }
 
     @Test
+    void reportsMinecraftServicesErrorMessageAndHttpStatus() throws Exception {
+        MicrosoftAuthConfig config = testConfig();
+        MockTransport success = new MockTransport(config);
+        AuthHttpTransport transport = request -> {
+            if (!request.uri().equals(config.minecraftAuthenticationEndpoint())) {
+                return success.send(request);
+            }
+            JsonObject error = new JsonObject();
+            error.addProperty("path", "/authentication/login_with_xbox");
+            error.addProperty("errorMessage",
+                "Invalid app registration, see https://aka.ms/AppRegInfo for more information");
+            return MockTransport.json(403, error);
+        };
+        MicrosoftAuthService service = service(config, transport, completingBrowser(), directory.resolve("mc-app"));
+
+        MicrosoftAuthException failure = assertThrows(MicrosoftAuthException.class,
+            () -> service.loginWithBrowser(update -> { }));
+
+        assertEquals("minecraft_authentication_failed", failure.code());
+        assertEquals(403, failure.httpStatus());
+        assertEquals("Minecraft authentication failed (HTTP 403): Invalid app registration, "
+            + "see https://aka.ms/AppRegInfo for more information", failure.getMessage());
+    }
+
+    @Test
     void reportsInvalidPublicClientRegistrationClearly() throws Exception {
         MicrosoftAuthConfig config = testConfig();
         AuthHttpTransport transport = request -> {

@@ -275,6 +275,15 @@ public final class MicrosoftAuthService {
         JsonObject minecraftLogin = new JsonObject();
         minecraftLogin.addProperty("identityToken", "XBL3.0 x=" + xsts.userHash() + ';' + xsts.token());
         JsonResponse minecraftResponse = postJson(config.minecraftAuthenticationEndpoint(), minecraftLogin);
+        if (minecraftResponse.statusCode() < 200 || minecraftResponse.statusCode() >= 300) {
+            String serviceMessage = optionalString(minecraftResponse.json(), "errorMessage");
+            if (!serviceMessage.isEmpty()) {
+                throw new MicrosoftAuthException("minecraft_authentication_failed",
+                    "Minecraft authentication failed (HTTP " + minecraftResponse.statusCode() + "): "
+                        + sanitizeMessage(serviceMessage, "Minecraft Services rejected the authentication request"),
+                    minecraftResponse.statusCode());
+            }
+        }
         requireSuccess(minecraftResponse, "minecraft_authentication_failed", "Minecraft authentication failed");
         String minecraftAccessToken = requiredString(minecraftResponse.json(), "access_token",
             "Minecraft access token");
